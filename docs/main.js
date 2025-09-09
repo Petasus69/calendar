@@ -23,6 +23,7 @@ onReady(() => {
   const calendarEl = document.getElementById('calendar');
   const newBtn = document.getElementById('btn-new');
   const copyBtn = document.getElementById('btn-copy');
+  const db = window.db; // Firestore или undefined
 
   function generateCalendarId() {
     if (window.crypto && window.crypto.getRandomValues) {
@@ -125,10 +126,28 @@ onReady(() => {
     }
   }
 
+  async function loadFromFirestore(id) {
+    const ref = db.collection('calendars').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      await ref.set({ events: [], updatedAt: Date.now() });
+      return { events: [] };
+    }
+    const data = snap.data();
+    return { events: Array.isArray(data.events) ? data.events : [] };
+  }
+
+  async function saveToFirestore(id, data) {
+    const ref = db.collection('calendars').doc(id);
+    await ref.set({ events: data.events || [], updatedAt: Date.now() }, { merge: true });
+  }
+
   let currentCalendarId = null;
   let calendar = initCalendar();
+  let unsubscribe = null;
+  let isApplyingRemote = false;
 
-  function persist() {
+  async function persist() {
     const events = calendar.getEvents().map((ev) => ({
       id: ev.id,
       title: ev.title,
@@ -136,17 +155,51 @@ onReady(() => {
       end: ev.endStr || ev.end?.toISOString(),
       allDay: ev.allDay
     }));
-    saveToStorage(currentCalendarId, { events });
+    if (!currentCalendarId) return;
+    if (db) {
+      try { await saveToFirestore(currentCalendarId, { events }); } catch (e) { showError('Не удалось сохранить в облако'); }
+    } else {
+      saveToStorage(currentCalendarId, { events });
+    }
   }
 
-  function load(id) {
-    calendar.getEvents().forEach((e) => e.remove());
-    const data = loadFromStorage(id);
-    for (const ev of data.events) {
-      calendar.addEvent(ev);
+  async function applyEvents(events) {
+    isApplyingRemote = true;
+    try {
+      calendar.getEvents().forEach((e) => e.remove());
+      for (const ev of events) {
+        calendar.addEvent(ev);
+      }
+    } finally {
+      isApplyingRemote = false;
     }
+  }
+
+  async function load(id) {
+    if (unsubscribe) { unsubscribe(); unsubscribe = null; }
     currentCalendarId = id;
     showInfo(`Текущий календарь: ${id.slice(0, 8)}…`);
+    if (db) {
+      try {
+        const initial = await loadFromFirestore(id);
+        await applyEvents(initial.events);
+        const ref = db.collection('calendars').doc(id);
+        unsubscribe = ref.onSnapshot((snap) => {
+          if (!snap.exists) return;
+          const data = snap.data();
+          if (!data) return;
+          const events = Array.isArray(data.events) ? data.events : [];
+          applyEvents(events);
+        });
+      } catch (e) {
+        showError('Не удалось загрузить из облака, использую локальные данные');
+        const local = loadFromStorage(id);
+        await applyEvents(local.events);
+      }
+    } else {
+      const local = loadFromStorage(id);
+      await applyEvents(local.events);
+    }
   }
 
   newBtn.addEventListener('click', () => {
