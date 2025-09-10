@@ -113,7 +113,26 @@
         try {
           const res = await fetch(`${API_BASE}/calendars/${currentUUID}/events`);
           const events = await res.json();
-          successCallback(events.map(e => ({ id: e.id, title: e.title, start: e.start, end: e.end })));
+          const mapped = events.map(e => {
+            // Если событие ровно один день без времени (00:00:00..23:59:59), отображаем как allDay-полоску
+            const isBoundary = (s, e2) => {
+              if (!s || !e2) return false;
+              const ms = s.match(/^([0-9]{4}-[0-9]{2}-[0-9]{2})T00:00:00$/);
+              const me = e2.match(/^([0-9]{4}-[0-9]{2}-[0-9]{2})T23:59:59$/);
+              if (!ms || !me) return false;
+              return ms[1] === me[1];
+            };
+            if (isBoundary(e.start, e.end)) {
+              const day = e.start.substring(0, 10);
+              const d = new Date(day + 'T00:00:00');
+              d.setDate(d.getDate() + 1); // exclusive end
+              const pad = n => String(n).padStart(2, '0');
+              const dayNext = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+              return { id: e.id, title: e.title, start: day, end: dayNext, allDay: true };
+            }
+            return { id: e.id, title: e.title, start: e.start, end: e.end, display: 'block' };
+          });
+          successCallback(mapped);
         } catch (e) {
           failureCallback(e);
         }
@@ -148,13 +167,39 @@
           eventDrop: async (info) => {
             await fetch(`${API_BASE}/calendars/${currentUUID}/events/${info.event.id}`, {
               method: 'PUT', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ start: toLocalIsoNoZ(info.event.start), end: info.event.end ? toLocalIsoNoZ(info.event.end) : toLocalIsoNoZ(info.event.start) })
+              body: JSON.stringify((() => {
+                if (info.event.allDay) {
+                  const start = new Date(info.event.start);
+                  const endExcl = info.event.end ? new Date(info.event.end) : new Date(start.getTime() + 24*60*60*1000);
+                  // преобразуем allDay [start, endExclusive) в [start 00:00:00, (endExclusive-1day) 23:59:59]
+                  const pad = n => String(n).padStart(2,'0');
+                  const toDate = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+                  const startStr = `${toDate(start)}T00:00:00`;
+                  const endInc = new Date(endExcl);
+                  endInc.setDate(endInc.getDate()-1);
+                  const endStr = `${toDate(endInc)}T23:59:59`;
+                  return { start: startStr, end: endStr };
+                }
+                return { start: toLocalIsoNoZ(info.event.start), end: info.event.end ? toLocalIsoNoZ(info.event.end) : toLocalIsoNoZ(info.event.start) };
+              })())
             });
           },
           eventResize: async (info) => {
             await fetch(`${API_BASE}/calendars/${currentUUID}/events/${info.event.id}`, {
               method: 'PUT', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ end: toLocalIsoNoZ(info.event.end) })
+              body: JSON.stringify((() => {
+                if (info.event.allDay) {
+                  // end в allDay exclusive -> сделаем inclusive 23:59:59 предыдущего дня
+                  const endExcl = new Date(info.event.end);
+                  const pad = n => String(n).padStart(2,'0');
+                  const toDate = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+                  const endInc = new Date(endExcl);
+                  endInc.setDate(endInc.getDate()-1);
+                  const endStr = `${toDate(endInc)}T23:59:59`;
+                  return { end: endStr };
+                }
+                return { end: toLocalIsoNoZ(info.event.end) };
+              })())
             });
           },
           eventClick: async (info) => {
