@@ -67,6 +67,11 @@
 
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
     <script>
+      // Минимальный клиент для API: без сборки, одна страница, FullCalendar.
+      // Важные моменты:
+      // - Работаем в локальной таймзоне (timeZone: 'local').
+      // - AllDay события отображаем полосой, в API сохраняем как 00:00:00..23:59:59.
+      // - /api/* проксируется nginx → backend:8000.
       const API_BASE = '/api';
       const calendarEl = document.getElementById('calendar');
       const shareEl = document.getElementById('share');
