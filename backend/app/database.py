@@ -3,6 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 
+# Конфигурация подключения к БД (контейнер db в docker-compose)
 POSTGRES_USER = os.getenv("POSTGRES_USER", "calendar")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "calendar")
 POSTGRES_DB = os.getenv("POSTGRES_DB", "calendar")
@@ -23,6 +24,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def get_db():
+    """Зависимость FastAPI: выдаёт SQLAlchemy-сессию и корректно закрывает её."""
     db = SessionLocal()
     try:
         yield db

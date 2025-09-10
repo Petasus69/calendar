@@ -13,6 +13,7 @@ app = FastAPI(title="Link Calendar API")
 
 
 # CORS
+# Разрешаем CORS для фронтенда (в docker по умолчанию идём через nginx-прокси)
 frontend_origin = os.getenv("CORS_ORIGIN", "*")
 app.add_middleware(
     CORSMiddleware,
@@ -52,7 +53,8 @@ def create_calendar(db: Session = Depends(get_db)):
     db.commit()
     db.refresh(calendar)
 
-    public_origin = os.getenv("PUBLIC_ORIGIN", "http://localhost")
+    # Публичная ссылка для шаринга календаря
+    public_origin = os.getenv("PUBLIC_ORIGIN", "http://localhost:8080")
     share_url = f"{public_origin}/c/{calendar.uuid}"
     return CalendarCreateOut(uuid=calendar.uuid, share_url=share_url)
 

@@ -37,8 +37,6 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-    environment:
-      - API_BASE=http://localhost:8000
     depends_on:
       - backend
     ports:

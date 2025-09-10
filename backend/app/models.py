@@ -7,6 +7,7 @@ Base = declarative_base()
 
 
 class Calendar(Base):
+    """Календарь, к которому имеют доступ по UUID-ссылке."""
     __tablename__ = "calendars"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -17,6 +18,8 @@ class Calendar(Base):
 
 
 class Event(Base):
+    """Событие в календаре. Даты/время храним как naive local ISO строки, но
+    на уровне БД — в UTC/naive datetime (конвертация на клиенте)."""
     __tablename__ = "events"
 
     id = Column(Integer, primary_key=True, index=True)
